@@ -95,6 +95,7 @@ function markStudy(){
 }
 
 let currentUtterance=null;
+let speechRetryTimer=null;
 
 function speak(text, rate=0.88){
   if(!("speechSynthesis" in window)){
@@ -103,38 +104,48 @@ function speak(text, rate=0.88){
   }
 
   const synth=window.speechSynthesis;
+  if(speechRetryTimer){ clearTimeout(speechRetryTimer); speechRetryTimer=null; }
 
-  // En iOS 27 es importante iniciar speak() directamente desde el toque
-  // (sin setTimeout) y crear una instancia nueva cada vez.
+  // Safari/iOS puede dejar speechSynthesis en un estado pausado/atascado
+  // después de varias reproducciones. Reiniciamos el motor antes de cada toque.
   synth.cancel();
+  synth.resume();
 
-  const makeUtterance=()=>{
-    const u=new SpeechSynthesisUtterance(text);
-    u.lang="fr-FR";
-    u.rate=rate;
-    u.pitch=1;
+  const u=new SpeechSynthesisUtterance(String(text));
+  u.lang="fr-FR";
+  u.rate=rate;
+  u.pitch=1;
 
-    // Elegir explícitamente una voz francesa evita que Safari dependa
-    // de la voz predeterminada de la región del teléfono.
-    const voices=synth.getVoices();
-    const frenchVoice=
-      voices.find(v=>v.lang==="fr-FR") ||
-      voices.find(v=>v.lang && v.lang.toLowerCase().startsWith("fr"));
-    if(frenchVoice) u.voice=frenchVoice;
+  const voices=synth.getVoices();
+  const frenchVoice=
+    voices.find(v=>v.lang==="fr-FR") ||
+    voices.find(v=>v.lang && v.lang.toLowerCase().startsWith("fr"));
+  if(frenchVoice) u.voice=frenchVoice;
 
-    currentUtterance=u;
-    return u;
+  currentUtterance=u;
+
+  u.onerror=()=>{
+    // Un error intermitente de WebKit puede aparecer después de varias frases.
+    // Reintentamos una sola vez sin perder el toque del usuario.
+    if(currentUtterance===u){
+      speechRetryTimer=setTimeout(()=>{
+        speechRetryTimer=null;
+        if(currentUtterance===u) speak(text,rate);
+      },120);
+    }
   };
 
-  const u=makeUtterance();
-  synth.speak(u);
+  u.onend=()=>{
+    if(currentUtterance===u) currentUtterance=null;
+  };
 
-  // Si la cola de WebKit quedó atascada, un segundo toque siempre
-  // vuelve a crear el utterance; nunca reutilizamos uno cancelado.
+  synth.speak(u);
+  // En iOS resume() inmediatamente después de speak() ayuda a evitar
+  // que WebKit deje la cola marcada como pausada.
+  synth.resume();
 }
 
 if("speechSynthesis" in window){
-  // Fuerza a Safari a cargar la lista de voces al abrir la página.
   speechSynthesis.getVoices();
   speechSynthesis.onvoiceschanged=()=>speechSynthesis.getVoices();
 }
