@@ -94,11 +94,69 @@ function markStudy(){
   }
 }
 
+let speechTimer=null;
+let speechKeepAlive=null;
+let speechToken=0;
+
 function speak(text, rate=0.88){
-  if(!("speechSynthesis" in window)){ alert("Tu navegador no tiene síntesis de voz disponible. Prueba Chrome o Safari."); return; }
-  speechSynthesis.cancel();
-  const u=new SpeechSynthesisUtterance(text); u.lang="fr-FR"; u.rate=rate; u.pitch=1;
-  speechSynthesis.speak(u);
+  if(!("speechSynthesis" in window)){
+    alert("Tu navegador no tiene síntesis de voz disponible. Prueba Chrome o Safari.");
+    return;
+  }
+
+  const synth=window.speechSynthesis;
+  const token=++speechToken;
+
+  // iPhone/Safari puede ignorar un speak() justo después de cancel().
+  // Cancelamos y dejamos que el motor de voz se reinicie antes de hablar.
+  clearTimeout(speechTimer);
+  clearInterval(speechKeepAlive);
+  synth.cancel();
+
+  const start=()=>{
+    if(token!==speechToken) return;
+
+    const u=new SpeechSynthesisUtterance(text);
+    u.lang="fr-FR";
+    u.rate=rate;
+    u.pitch=1;
+
+    let started=false;
+
+    u.onstart=()=>{
+      started=true;
+      // Mantiene viva la síntesis en Safari/iOS para frases largas.
+      clearInterval(speechKeepAlive);
+      speechKeepAlive=setInterval(()=>{
+        if(token===speechToken && synth.speaking){
+          synth.pause();
+          synth.resume();
+        }
+      }, 5000);
+    };
+
+    const cleanup=()=>{
+      if(token===speechToken){
+        clearInterval(speechKeepAlive);
+        speechKeepAlive=null;
+      }
+    };
+
+    u.onend=cleanup;
+    u.onerror=cleanup;
+
+    synth.speak(u);
+
+    // Si Safari no inició la voz, reintenta una vez.
+    setTimeout(()=>{
+      if(token===speechToken && !started && !synth.speaking){
+        synth.cancel();
+        synth.speak(u);
+      }
+    }, 250);
+  };
+
+  speechTimer=setTimeout(start, 80);
 }
 
 let mediaRecorder=null, recChunks=[], recStream=null;
