@@ -236,8 +236,8 @@ function renderPhrases(ps){
       <div class="phrase">${p.fr}</div>
       <div class="translation">${p.es}</div>
       <div class="actions">
-        <button onclick='speak(${JSON.stringify(p.fr)},.88)'>🔊 Escuchar</button>
-        <button onclick='speak(${JSON.stringify(p.fr)},.62)'>🐢 Lento</button>
+        <button onclick="speak(decodeURIComponent('\${encodeURIComponent(p.fr)}'),.88)">🔊 Escuchar</button>
+        <button onclick="speak(decodeURIComponent('\${encodeURIComponent(p.fr)}'),.62)">🐢 Lento</button>
         <button onclick='recordToggle(${JSON.stringify(id)},this)'>🎙️ Grabarme</button>
       </div>
       <audio class="player ${state.recordings[id]?'':'hidden'}" data-player="${id}" controls src="${state.recordings[id]||''}"></audio>
